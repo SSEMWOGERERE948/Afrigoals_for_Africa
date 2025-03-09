@@ -10,6 +10,18 @@ export interface Match {
   status?: string;
   stadium?: string;
   referee?: string;
+  extraTime?: number;
+  homeLineup?: TeamLineup;
+  awayLineup?: TeamLineup;
+  startTime?: Date;
+  currentMinute?: number;
+}
+
+export interface TeamLineup {
+  formation: string;
+  startingXI: Player[];
+  substitutes: Player[];
+  coach: string;
 }
 
 export interface Player {
@@ -68,4 +80,16 @@ export interface League {
   season: string;
   teams: number;
   currentMatchday: number;
+}
+
+export interface Fixture {
+  id: string;
+  league: string;
+  homeTeam: string;
+  awayTeam: string;
+  date: string;
+  time: string;
+  stadium: string;
+  referee?: string;
+  status: 'Scheduled' | 'Lineup Set' | 'Live' | 'Finished';
 }
