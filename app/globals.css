@@ -57,3 +57,19 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* styles/globals.css */
+@keyframes live-blink {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.2);
+  }
+}
+
+.live-pulse {
+  animation: live-blink 1.2s ease-in-out infinite;
+}

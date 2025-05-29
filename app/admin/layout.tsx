@@ -8,7 +8,8 @@ import {
   ArrowLeftRight, 
   Trophy,
   Calendar,
-  Settings
+  Settings,
+  UserPlus
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -20,6 +21,7 @@ export default function AdminLayout({
 
   const navigation = [
     { name: "Teams", href: "/admin/teams", icon: Users },
+    { name: "Players", href: "/admin/players", icon: UserPlus },
     { name: "News", href: "/admin/news", icon: Newspaper },
     { name: "Transfers", href: "/admin/transfers", icon: ArrowLeftRight },
     { name: "Matches", href: "/admin/matches", icon: Trophy },
