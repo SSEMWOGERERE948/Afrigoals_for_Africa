@@ -5,6 +5,7 @@ export interface Match {
   awayTeam: string
   time: string
   date: string
+  venue?: string
   homeScore: number | null
   awayScore: number | null
   status?: string
@@ -169,11 +170,13 @@ export interface MatchState {
     | "First Half"
     | "Half Time"
     | "Second Half"
+    | "Full Time"
     | "Extra Time First"
     | "Extra Time Second"
+    | "Extra Time Break"
     | "Penalty Shootout"
     | "Finished"
-  isRunning: boolean
+  running: boolean
   startTime?: Date
   halfTimeStart?: Date
   secondHalfStart?: Date
@@ -188,7 +191,6 @@ export interface MatchState {
 
 export interface Goal {
   id: string
-  matchId: string
   playerId: string
   playerName: string
   team: "home" | "away"
@@ -201,7 +203,20 @@ export interface Goal {
 export interface MatchEvent {
   id: string
   matchId: string
-  type: "goal" | "yellow_card" | "red_card" | "substitution" | "half_time" | "full_time"
+  type:
+    | "goal"
+    | "yellow_card"
+    | "red_card"
+    | "substitution"
+    | "half_time"
+    | "full_time"
+    | "kick_off"
+    | "second_half_start"
+    | "extra_time_start"
+    | "extra_time_second_start"
+    | "final_whistle"
+    | "pause"
+    | "resume"
   minute: number
   team?: "home" | "away"
   playerId?: string

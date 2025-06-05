@@ -43,7 +43,8 @@ export default function FixturesAdmin() {
         goalsFor: 45,
         goalsAgainst: 12,
         points: 49
-      }
+      },
+      teamType: ""
     }
   ]);
 

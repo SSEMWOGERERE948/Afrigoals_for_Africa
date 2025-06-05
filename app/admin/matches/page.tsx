@@ -4,7 +4,8 @@ import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { GroupIcon as Formation } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { GroupIcon as Formation, Play } from "lucide-react"
 import type { Team, Player, Match, League, TeamLineup, MatchUpdateRequest } from "@/app/types"
 import { fetchAllTeams, fetchLeagues, createLeague, deleteLeague } from "@/components/team_api"
 import { fetchPlayersByTeamId } from "@/components/player_api"
@@ -16,6 +17,7 @@ import MatchForm from "@/components/match-form"
 import MatchList from "@/components/match-list"
 import LineupManager from "@/components/lineup-manager"
 import SubstitutionManager, { type Substitution } from "@/components/substitution-manager"
+import LiveMatchControl from "@/components/live-match-control"
 
 interface MatchLineup {
   matchId: string
@@ -32,6 +34,7 @@ export default function MatchScheduling() {
   const [homeTeamPlayers, setHomeTeamPlayers] = useState<Player[]>([])
   const [awayTeamPlayers, setAwayTeamPlayers] = useState<Player[]>([])
   const [selectedMatch, setSelectedMatch] = useState<string>("")
+  const [selectedLiveMatch, setSelectedLiveMatch] = useState<string>("")
   const [activeTab, setActiveTab] = useState("schedule")
   const [isLoading, setIsLoading] = useState(false)
   const [homeSubstitutions, setHomeSubstitutions] = useState<Substitution[]>([])
@@ -129,6 +132,35 @@ export default function MatchScheduling() {
     loadMatchData()
   }, [selectedMatch, matches, teams])
 
+  // Load live match data when selected
+  useEffect(() => {
+    const loadLiveMatchData = async () => {
+      if (selectedLiveMatch && matches.length > 0 && teams.length > 0) {
+        const selectedMatchData = matches.find((m) => m.id === selectedLiveMatch)
+
+        if (selectedMatchData) {
+          try {
+            // Find team objects
+            const homeTeam = teams.find((t) => t.name === selectedMatchData.homeTeam)
+            const awayTeam = teams.find((t) => t.name === selectedMatchData.awayTeam)
+
+            // Load players for live match control
+            const [homePlayers, awayPlayers] = await Promise.all([
+              homeTeam ? fetchPlayersByTeamId(homeTeam.id) : Promise.resolve([]),
+              awayTeam ? fetchPlayersByTeamId(awayTeam.id) : Promise.resolve([]),
+            ])
+
+            setHomeTeamPlayers(homePlayers)
+            setAwayTeamPlayers(awayPlayers)
+          } catch (error) {
+            console.error("❌ Error loading live match data:", error)
+          }
+        }
+      }
+    }
+    loadLiveMatchData()
+  }, [selectedLiveMatch, matches, teams])
+
   const handleAddLeague = async (leagueData: Omit<League, "id">) => {
     const newLeague = await createLeague(leagueData)
     setLeagues((prev) => [...prev, newLeague])
@@ -161,6 +193,15 @@ export default function MatchScheduling() {
   const handleSelectMatch = (matchId: string) => {
     setSelectedMatch(matchId)
     setActiveTab("lineup")
+  }
+
+  const handleSelectLiveMatch = (matchId: string) => {
+    setSelectedLiveMatch(matchId)
+    setActiveTab("live")
+  }
+
+  const handleMatchUpdate = (updatedMatch: Match) => {
+    setMatches((prev) => prev.map((match) => (match.id === updatedMatch.id ? updatedMatch : match)))
   }
 
   const handleSubstitution = (playerOut: Player, playerIn: Player, team: "home" | "away") => {
@@ -301,14 +342,23 @@ export default function MatchScheduling() {
     )
   }
 
+  const getEligibleMatches = () => {
+    return matches.filter((match) => match.status === "Lineup Set" || match.status === "Live")
+  }
+
+  const getSelectedLiveMatch = () => {
+    return matches.find((m) => m.id === selectedLiveMatch)
+  }
+
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold">Match Scheduling & Lineup Management</h1>
+      <h1 className="text-3xl font-bold">Match Scheduling & Management</h1>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="schedule">Schedule Match</TabsTrigger>
           <TabsTrigger value="lineup">Set Lineups</TabsTrigger>
+          <TabsTrigger value="live">Live Control</TabsTrigger>
         </TabsList>
 
         <TabsContent value="schedule" className="space-y-6">
@@ -319,6 +369,7 @@ export default function MatchScheduling() {
             leagues={leagues}
             onSelectMatch={handleSelectMatch}
             onDeleteMatch={handleDeleteMatch}
+            onSelectLiveMatch={handleSelectLiveMatch}
           />
         </TabsContent>
 
@@ -420,6 +471,48 @@ export default function MatchScheduling() {
               </Card>
             </>
           )}
+        </TabsContent>
+
+        <TabsContent value="live" className="space-y-6">
+          <Card className="p-6">
+            <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
+              <Play className="h-5 w-5" />
+              Live Match Control
+            </h2>
+
+            <div className="mb-6">
+              <label className="text-sm font-medium mb-2 block">Select Match to Control</label>
+              <Select value={selectedLiveMatch} onValueChange={setSelectedLiveMatch}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a match with lineups set" />
+                </SelectTrigger>
+                <SelectContent>
+                  {getEligibleMatches().map((match) => (
+                    <SelectItem key={match.id} value={match.id}>
+                      {match.homeTeam} vs {match.awayTeam} - {match.date} ({match.status})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedLiveMatch && getSelectedLiveMatch() ? (
+              <LiveMatchControl
+                match={getSelectedLiveMatch()!}
+                homeTeamPlayers={homeTeamPlayers}
+                awayTeamPlayers={awayTeamPlayers}
+                onMatchUpdate={handleMatchUpdate}
+              />
+            ) : (
+              <div className="text-center py-8">
+                <p className="text-muted-foreground">
+                  {getEligibleMatches().length === 0
+                    ? "No matches with lineups set are available for live control."
+                    : "Please select a match to start live control."}
+                </p>
+              </div>
+            )}
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

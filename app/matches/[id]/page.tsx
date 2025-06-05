@@ -5,9 +5,9 @@ import { useParams } from "next/navigation"
 import { Card } from "@/components/ui/card"
 import { Loader2 } from "lucide-react"
 import MatchClient from "@/components/client/match-client"
+import { fetchMatches } from "@/components/matches_api"
 import type { Match } from "@/app/types"
 import LiveMatchDisplay from "@/components/live-match-display"
-import { fetchMatches } from "@/components/matches_api"
 
 export default function MatchPage() {
   const params = useParams()

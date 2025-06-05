@@ -71,7 +71,7 @@ export default function TeamDetails({ team }: { team: Team }) {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>{player.position}</TableCell>
+                  {/* <TableCell>{player.position}</TableCell> */}
                   <TableCell>{player.age}</TableCell>
                   <TableCell>{player.stats.matches}</TableCell>
                   <TableCell>{player.stats.goals}</TableCell>

@@ -1,77 +1,65 @@
 "use client"
 
-import { Card } from "@/components/ui/card"
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Calendar, Clock, MapPin, Trophy, Trash2 } from "lucide-react"
-import type { Match, League } from "@/app/types"
+import { Play } from "lucide-react"
+import { League, Match } from "@/app/types"
 
 interface MatchListProps {
   matches: Match[]
   leagues: League[]
   onSelectMatch: (matchId: string) => void
-  onDeleteMatch: (matchId: string) => Promise<void>
+  onDeleteMatch: (matchId: string) => void
+  onSelectLiveMatch?: (matchId: string) => void
 }
 
-export default function MatchList({ matches, leagues, onSelectMatch, onDeleteMatch }: MatchListProps) {
-  const getLeagueName = (leagueId: string) => {
-    return leagues.find((l) => l.id === leagueId)?.name || leagueId
-  }
-
-  const handleDeleteMatch = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this match?")) return
-    try {
-      await onDeleteMatch(id)
-    } catch (error) {
-      console.error("Failed to delete match:", error)
-      alert("Failed to delete match.")
-    }
-  }
-
+const MatchList = ({ matches, leagues, onSelectMatch, onDeleteMatch, onSelectLiveMatch }: MatchListProps) => {
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold mb-4">Scheduled Matches</h2>
-      {matches.length === 0 ? (
-        <p className="text-muted-foreground">No matches scheduled yet.</p>
-      ) : (
-        <div className="space-y-3">
-          {matches.map((match) => (
-            <div key={match.id} className="border rounded-lg p-4 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="text-center">
-                  <div className="font-semibold">{match.homeTeam}</div>
-                  <div className="text-sm text-muted-foreground">vs</div>
-                  <div className="font-semibold">{match.awayTeam}</div>
-                </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Trophy className="h-4 w-4" />
-                  {getLeagueName(match.league)}
-                  <Calendar className="h-4 w-4 ml-2" />
-                  {match.date}
-                  <Clock className="h-4 w-4 ml-2" />
-                  {match.time}
-                  <MapPin className="h-4 w-4 ml-2" />
-                  {match.stadium}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant={match.status === "Scheduled" ? "secondary" : "default"}>{match.status}</Badge>
-                <Button variant="outline" size="sm" onClick={() => onSelectMatch(match.id)}>
-                  Set Lineup
+    <Table>
+      <TableCaption>A list of your recent matches.</TableCaption>
+      <TableHeader>
+        <TableRow>
+          <TableHead>League</TableHead>
+          <TableHead>Home Team</TableHead>
+          <TableHead>Away Team</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-right">Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {matches.map((match) => {
+          const league = leagues.find((league) => league.id === match.leagueId)
+          return (
+            <TableRow key={match.id}>
+              <TableCell>{league?.name}</TableCell>
+              <TableCell>{match.homeTeam}</TableCell>
+              <TableCell>{match.awayTeam}</TableCell>
+              <TableCell>{match.status}</TableCell>
+              <TableCell className="text-right">
+                <Button size="sm" onClick={() => onSelectMatch(match.id)} className="mr-2">
+                  Edit
                 </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDeleteMatch(match.id)}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="h-4 w-4" />
+                <Button size="sm" variant="destructive" onClick={() => onDeleteMatch(match.id)}>
+                  Delete
                 </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </Card>
+                {match.status === "Lineup Set" || match.status === "Live" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onSelectLiveMatch?.(match.id)}
+                    className="flex items-center gap-1"
+                  >
+                    <Play className="h-3 w-3" />
+                    Live Control
+                  </Button>
+                ) : null}
+              </TableCell>
+            </TableRow>
+          )
+        })}
+      </TableBody>
+    </Table>
   )
 }
+
+export default MatchList
