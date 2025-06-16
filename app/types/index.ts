@@ -223,3 +223,125 @@ export interface MatchEvent {
   playerName?: string
   description: string
 }
+
+
+// Ecommerce Types
+export interface ProductCategory {
+  id: string
+  name: string
+  description?: string
+  slug: string
+  parentId?: string
+  imageUrl?: string
+  isActive: boolean
+  createdAt: Date
+  updatedAt: Date
+  sortOrder: number
+}
+
+export interface ProductVariant {
+  id: string
+  name: string
+  value: string
+  price?: number
+  stock?: number
+  sku?: string
+}
+
+export interface Product {
+  id: string
+  name: string
+  description: string
+  price: number
+  originalPrice?: number
+  sku: string
+  stock: number
+  images: string[]
+  category: ProductCategory
+  variants?: ProductVariant[]
+  tags: string[]
+  isFeatured: boolean
+  isActive: boolean
+  rating: number
+  reviewCount: number
+  teamId?: string
+  team?: Team
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface CartItem {
+  id: string
+  productId: string
+  product: Product
+  quantity: number
+  variantId?: string
+  variant?: ProductVariant
+  price: number
+  totalPrice: number
+  image?:string
+  name?:string
+}
+
+export interface Cart {
+  id: string
+  sessionId: string
+  items: CartItem[]
+  totalItems: number
+  subtotal: number
+  tax: number
+  shipping: number
+  total: number
+  createdAt: Date
+  updatedAt: Date
+}
+
+export interface Order {
+  id: string
+  orderNumber: string
+  customerId?: string
+  customerEmail: string
+  customerName: string
+  customerPhone?: string
+  items: CartItem[]
+  subtotal: number
+  tax: number
+  shipping: number
+  total: number
+  status: "pending" | "processing" | "shipped" | "delivered" | "cancelled"
+  paymentStatus: "pending" | "paid" | "failed" | "refunded"
+  paymentMethod?: string
+  paymentReference?: string
+  shippingAddress: {
+    street: string
+    city: string
+    state: string
+    country: string
+    postalCode: string
+  }
+  billingAddress?: {
+    street: string
+    city: string
+    state: string
+    country: string
+    postalCode: string
+  }
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Checkout Types
+export interface CustomerInfo {
+  firstName: string
+  lastName: string
+  email: string
+  phone: string
+}
+
+export interface Address {
+  street: string
+  city: string
+  state: string
+  country: string
+  postalCode: string
+}

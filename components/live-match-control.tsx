@@ -7,9 +7,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
-import { Play, Pause, Square, Clock, Target, CheckCircle, Users, BellIcon as Whistle } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Play, Pause, Square, Clock, Target, CheckCircle, Users, BellIcon as Whistle, Edit } from "lucide-react"
 import type { Match, MatchState, Goal, Player } from "@/app/types"
-import { addMatchEvent, updateMatchState, addGoal, fetchMatchState } from "./matches_api"
+import {
+  addMatchEvent,
+  updateMatchState,
+  addGoal,
+  fetchMatchState,
+  fetchMatchGoals,
+  fetchMatchEvents,
+  deleteGoal,
+  updateGoal,
+  deleteMatchEvent,
+} from "./matches_api"
+import { matchTimerManager } from "@/lib/match-timer-manager"
+import MatchTimerDebug from "./match-timer-debug"
+import useLiveMatchClock from "./useLiveMatchClock"
 
 interface LiveMatchControlProps {
   match: Match
@@ -32,7 +46,7 @@ export default function LiveMatchControl({
   awayTeamPlayers,
   onMatchUpdate,
 }: LiveMatchControlProps) {
-  // Initialize match state from existing match data - MATCH SPECIFIC
+  // Initialize match state from existing match data
   const [matchState, setMatchState] = useState<MatchState>(() => ({
     status: (match.status as any) || "Scheduled",
     currentMinute: match.matchState?.currentMinute || match.currentMinute || 0,
@@ -48,10 +62,19 @@ export default function LiveMatchControl({
 
   const [isGoalDialogOpen, setIsGoalDialogOpen] = useState(false)
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false)
+  const [isTimeEditDialogOpen, setIsTimeEditDialogOpen] = useState(false)
   const [recentEvents, setRecentEvents] = useState<QuickEvent[]>([])
   const [notification, setNotification] = useState<string>("")
   const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now())
   const [isInitialized, setIsInitialized] = useState(false)
+  const [pendingGoals, setPendingGoals] = useState<
+    Array<{
+      id: string
+      team: "home" | "away"
+      minute: number
+      timestamp: Date
+    }>
+  >([])
 
   const [goalForm, setGoalForm] = useState({
     team: "home" as "home" | "away",
@@ -67,9 +90,15 @@ export default function LiveMatchControl({
     description: "",
   })
 
-  // Use match ID as key for intervals to ensure each match has its own timers
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
-  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [timeEditForm, setTimeEditForm] = useState({
+    currentMinute: 0,
+    period: "First Half" as MatchState["period"],
+    addedTime: 0,
+  })
+
+  const [matchGoals, setMatchGoals] = useState<Goal[]>([])
+  const [matchEvents, setMatchEvents] = useState<any[]>([])
+
   const notificationTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Load match-specific state on component mount
@@ -77,125 +106,82 @@ export default function LiveMatchControl({
     const loadMatchState = async () => {
       try {
         console.log(`🔄 Loading state for match ${match.id}`)
-        const serverState = await fetchMatchState(match.id)
 
-        if (serverState) {
-          console.log(`✅ Loaded server state for match ${match.id}:`, serverState)
-          setMatchState(serverState)
+        // First check if there's a global timer state
+        const globalState = matchTimerManager.getMatchState(match.id)
+        if (globalState) {
+          console.log(`✅ Found global timer state for match ${match.id}:`, globalState)
+          setMatchState(globalState)
         } else {
-          console.log(`📝 No server state found for match ${match.id}, using default`)
+          // Try to load from server
+          const serverState = await fetchMatchState(match.id)
+          if (serverState) {
+            console.log(`✅ Loaded server state for match ${match.id}:`, serverState)
+            setMatchState(serverState)
+            // Initialize global timer manager with server state
+            matchTimerManager.updateMatchState(match.id, serverState)
+          } else {
+            console.log(`📝 No state found for match ${match.id}, using default`)
+            // Initialize global timer manager with default state
+            matchTimerManager.updateMatchState(match.id, matchState)
+          }
         }
 
         setIsInitialized(true)
       } catch (error) {
         console.error(`❌ Failed to load state for match ${match.id}:`, error)
-        setIsInitialized(true) // Still initialize with default state
+        setIsInitialized(true)
       }
     }
 
     loadMatchState()
-  }, [match.id]) // Re-run when match ID changes
-
-  // Real-time match timer - MATCH SPECIFIC
-  useEffect(() => {
-    // Clear any existing interval when match changes
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
-
-    if (matchState.running && isInitialized) {
-      console.log(`⏰ Starting timer for match ${match.id}`)
-
-      intervalRef.current = setInterval(() => {
-        setMatchState((prev) => {
-          const newMinute = prev.currentMinute + 1
-          const updatedState = { ...prev, currentMinute: newMinute }
-
-          // Auto-transition periods with realistic timing
-          if (newMinute === 45 && prev.period === "First Half") {
-            updatedState.period = "Half Time"
-            updatedState.running = false
-            showNotification("⏰ Half Time - 45 minutes completed")
-            addRecentEvent("half_time", "Half Time")
-          } else if (newMinute === 90 && prev.period === "Second Half") {
-            updatedState.period = "Full Time"
-            updatedState.running = false
-            showNotification("🏁 Full Time - 90 minutes completed")
-            addRecentEvent("full_time", "Full Time")
-          } else if (newMinute === 105 && prev.period === "Extra Time First") {
-            updatedState.period = "Extra Time Break"
-            updatedState.running = false
-            showNotification("⏰ Extra Time First Half Complete")
-            addRecentEvent("extra_half_time", "Extra Time Break")
-          } else if (newMinute === 120 && prev.period === "Extra Time Second") {
-            updatedState.period = "Finished"
-            updatedState.running = false
-            updatedState.status = "Finished"
-            showNotification("🏁 Match Finished - 120 minutes completed")
-            addRecentEvent("match_end", "Match Finished")
-          }
-
-          return updatedState
-        })
-      }, 1000) // Real-time second-by-second updates
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        console.log(`⏹️ Stopping timer for match ${match.id}`)
-        clearInterval(intervalRef.current)
-        intervalRef.current = null
-      }
-    }
-  }, [matchState.running, isInitialized, match.id])
-
-  // Auto-sync match state to backend - MATCH SPECIFIC
-  useEffect(() => {
-    // Clear any existing sync interval when match changes
-    if (syncIntervalRef.current) {
-      clearInterval(syncIntervalRef.current)
-      syncIntervalRef.current = null
-    }
-
-    const running = matchState.running
-    const status = matchState.status
-
-    const syncMatchState = () => {
-      if (status === "Live" && running && isInitialized) {
-        console.log(`🔄 Auto-syncing state for match ${match.id}`)
-        saveMatchState(matchState, false) // Silent sync
-        setLastSyncTime(Date.now())
-      }
-    }
-
-    if (status === "Live" && running && isInitialized) {
-      syncIntervalRef.current = setInterval(syncMatchState, 5000)
-    }
-
-    return () => {
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current)
-        syncIntervalRef.current = null
-      }
-    }
-  }, [matchState, isInitialized, match.id])
-
-  // Clean up on unmount or match change
-  useEffect(() => {
-    return () => {
-      console.log(`🧹 Cleaning up timers for match ${match.id}`)
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-      if (syncIntervalRef.current) {
-        clearInterval(syncIntervalRef.current)
-      }
-      if (notificationTimeoutRef.current) {
-        clearTimeout(notificationTimeoutRef.current)
-      }
-    }
   }, [match.id])
+
+  // Register with global timer manager when component mounts
+  useEffect(() => {
+    if (!isInitialized) return
+
+    console.log(`📞 Registering callback for match ${match.id}`)
+
+    // Register callback to receive state updates from global timer
+    matchTimerManager.registerCallback(match.id, (newState) => {
+      console.log(`📡 Received global state update for match ${match.id}:`, newState)
+      setMatchState(newState)
+      setLastSyncTime(Date.now())
+
+      // Show notifications for period changes
+      if (newState.period === "Half Time" && matchState.period === "First Half") {
+        showNotification("⏰ Half Time - 45 minutes completed")
+        addRecentEvent("half_time", "Half Time")
+      } else if (newState.period === "Full Time" && matchState.period === "Second Half") {
+        showNotification("🏁 Full Time - 90 minutes completed")
+        addRecentEvent("full_time", "Full Time")
+      }
+    })
+
+    // Cleanup callback when component unmounts or match changes
+    return () => {
+      console.log(`📞 Unregistering callback for match ${match.id}`)
+      matchTimerManager.unregisterCallback(match.id)
+    }
+  }, [match.id, isInitialized])
+
+  // Load match goals and events
+  useEffect(() => {
+    const loadMatchData = async () => {
+      try {
+        const [goals, events] = await Promise.all([fetchMatchGoals(match.id), fetchMatchEvents(match.id)])
+        setMatchGoals(goals || [])
+        setMatchEvents(events || [])
+      } catch (error) {
+        console.error(`Failed to load match data for ${match.id}:`, error)
+      }
+    }
+
+    if (isInitialized) {
+      loadMatchData()
+    }
+  }, [match.id, isInitialized])
 
   const showNotification = useCallback(
     (message: string) => {
@@ -213,13 +199,13 @@ export default function LiveMatchControl({
   const addRecentEvent = useCallback(
     (type: string, description: string) => {
       const event: QuickEvent = {
-        id: `${match.id}-${Date.now()}`, // Include match ID in event ID
+        id: `${match.id}-${Date.now()}`,
         type,
         description,
         minute: matchState.currentMinute,
         timestamp: new Date(),
       }
-      setRecentEvents((prev) => [event, ...prev.slice(0, 4)]) // Keep last 5 events
+      setRecentEvents((prev) => [event, ...prev.slice(0, 4)])
     },
     [matchState.currentMinute, match.id],
   )
@@ -227,8 +213,14 @@ export default function LiveMatchControl({
   const saveMatchState = async (state: MatchState, showFeedback = true) => {
     try {
       console.log(`💾 Saving state for match ${match.id}:`, state)
+
+      // Update global timer manager
+      matchTimerManager.updateMatchState(match.id, state)
+
+      // Save to backend
       const updatedMatch = await updateMatchState(match.id, state)
       onMatchUpdate(updatedMatch)
+
       if (showFeedback) {
         showNotification("✅ Match state saved")
       }
@@ -250,13 +242,19 @@ export default function LiveMatchControl({
       startTime: new Date(),
     }
 
-    console.log(`🚀 Starting match ${match.id}`)
+    console.log(`🚀 Starting match ${match.id} with global timer`)
     setMatchState(newState)
     await saveMatchState(newState)
+
+    // Start global timer
+    matchTimerManager.startTimer(match.id, newState, (updatedState) => {
+      setMatchState(updatedState)
+      setLastSyncTime(Date.now())
+    })
+
     showNotification("🚀 Match Started! Kick-off!")
     addRecentEvent("kick_off", "Match kicked off")
 
-    // Add kick-off event
     await addMatchEvent(match.id, {
       type: "kick_off",
       minute: 0,
@@ -265,9 +263,10 @@ export default function LiveMatchControl({
   }
 
   const pauseMatch = async () => {
-    const newState = { ...matchState, running: false }
     console.log(`⏸️ Pausing match ${match.id}`)
-    setMatchState(newState)
+    matchTimerManager.pauseMatch(match.id)
+
+    const newState = { ...matchState, running: false }
     await saveMatchState(newState)
     showNotification("⏸️ Match Paused")
     addRecentEvent("pause", `Match paused at ${getDisplayMinute()}'`)
@@ -280,9 +279,10 @@ export default function LiveMatchControl({
   }
 
   const resumeMatch = async () => {
-    const newState = { ...matchState, running: true }
     console.log(`▶️ Resuming match ${match.id}`)
-    setMatchState(newState)
+    matchTimerManager.resumeMatch(match.id)
+
+    const newState = { ...matchState, running: true }
     await saveMatchState(newState)
     showNotification("▶️ Match Resumed")
     addRecentEvent("resume", `Match resumed at ${getDisplayMinute()}'`)
@@ -306,6 +306,10 @@ export default function LiveMatchControl({
     console.log(`🔄 Starting second half for match ${match.id}`)
     setMatchState(newState)
     await saveMatchState(newState)
+
+    // Update global timer
+    matchTimerManager.updateMatchState(match.id, newState)
+
     showNotification("🔄 Second Half Started!")
     addRecentEvent("second_half", "Second half kicked off")
 
@@ -328,6 +332,10 @@ export default function LiveMatchControl({
     console.log(`⏰ Starting extra time for match ${match.id}`)
     setMatchState(newState)
     await saveMatchState(newState)
+
+    // Update global timer
+    matchTimerManager.updateMatchState(match.id, newState)
+
     showNotification("⏰ Extra Time Started!")
     addRecentEvent("extra_time", "Extra time period started")
 
@@ -349,6 +357,10 @@ export default function LiveMatchControl({
     console.log(`⏰ Starting extra time second half for match ${match.id}`)
     setMatchState(newState)
     await saveMatchState(newState)
+
+    // Update global timer
+    matchTimerManager.updateMatchState(match.id, newState)
+
     showNotification("⏰ Extra Time Second Half Started!")
     addRecentEvent("extra_time_second", "Extra time second half started")
 
@@ -370,10 +382,13 @@ export default function LiveMatchControl({
     console.log(`🏁 Ending match ${match.id}`)
     setMatchState(newState)
     await saveMatchState(newState)
+
+    // Stop global timer
+    matchTimerManager.stopTimer(match.id)
+
     showNotification("🏁 Match Ended! Final Whistle!")
     addRecentEvent("final_whistle", "Final whistle")
 
-    // Add final whistle event
     await addMatchEvent(match.id, {
       type: "final_whistle",
       minute: matchState.currentMinute,
@@ -422,8 +437,89 @@ export default function LiveMatchControl({
   }
 
   const handleQuickGoal = async (team: "home" | "away") => {
+    if (!matchState.running) {
+      showNotification("❌ Cannot add goal - match is not running")
+      return
+    }
+
+    const currentMinute = matchState.currentMinute
+    const pendingGoalId = `pending-${match.id}-${Date.now()}`
+
+    const updatedMatch = {
+      ...match,
+      homeScore: team === "home" ? (match.homeScore || 0) + 1 : match.homeScore || 0,
+      awayScore: team === "away" ? (match.awayScore || 0) + 1 : match.awayScore || 0,
+    }
+
+    const pendingGoal = {
+      id: pendingGoalId,
+      team,
+      minute: currentMinute,
+      timestamp: new Date(),
+    }
+
+    setPendingGoals((prev) => [...prev, pendingGoal])
+    onMatchUpdate(updatedMatch)
+
+    const teamName = team === "home" ? match.homeTeam : match.awayTeam
+    showNotification(`⚽ GOAL! ${teamName} - ${currentMinute}' (Details pending)`)
+    addRecentEvent("goal_pending", `Goal scored by ${teamName} - Details TBD`)
+
+    await addMatchEvent(match.id, {
+      type: "goal",
+      minute: currentMinute,
+      team,
+      playerId: "TBD",
+      playerName: "TBD",
+      description: `Goal by TBD (${teamName}) - Details pending`,
+    })
+
     setGoalForm({ ...goalForm, team })
     setIsGoalDialogOpen(true)
+  }
+
+  const handleDeleteGoal = async (goalId: string) => {
+    try {
+      const updatedMatch = await deleteGoal(match.id, goalId)
+      onMatchUpdate(updatedMatch)
+
+      const goals = await fetchMatchGoals(match.id)
+      setMatchGoals(goals || [])
+
+      showNotification("✅ Goal deleted successfully")
+    } catch (error) {
+      console.error("Failed to delete goal:", error)
+      showNotification("❌ Failed to delete goal")
+    }
+  }
+
+  const handleUpdateGoal = async (goalId: string, goalData: any) => {
+    try {
+      const updatedMatch = await updateGoal(match.id, goalId, goalData)
+      onMatchUpdate(updatedMatch)
+
+      const goals = await fetchMatchGoals(match.id)
+      setMatchGoals(goals || [])
+
+      showNotification("✅ Goal updated successfully")
+    } catch (error) {
+      console.error("Failed to update goal:", error)
+      showNotification("❌ Failed to update goal")
+    }
+  }
+
+  const handleDeleteEvent = async (eventId: string) => {
+    try {
+      await deleteMatchEvent(match.id, eventId)
+
+      const events = await fetchMatchEvents(match.id)
+      setMatchEvents(events || [])
+
+      showNotification("✅ Event deleted successfully")
+    } catch (error) {
+      console.error("Failed to delete event:", error)
+      showNotification("❌ Failed to delete event")
+    }
   }
 
   const handleAddGoal = async () => {
@@ -452,11 +548,16 @@ export default function LiveMatchControl({
     }
 
     try {
-      console.log(`⚽ Adding goal to match ${match.id}:`, goal)
+      console.log(`⚽ Completing goal details for match ${match.id}:`, goal)
       const updatedMatch = await addGoal(match.id, goal)
       onMatchUpdate(updatedMatch)
 
-      // Add goal event
+      setPendingGoals((prev) => prev.filter((pg) => pg.team !== goalForm.team || pg.minute !== currentMinute))
+
+      const [goals, events] = await Promise.all([fetchMatchGoals(match.id), fetchMatchEvents(match.id)])
+      setMatchGoals(goals || [])
+      setMatchEvents(events || [])
+
       await addMatchEvent(match.id, {
         type: "goal",
         minute: currentMinute,
@@ -469,8 +570,8 @@ export default function LiveMatchControl({
       const teamName = goalForm.team === "home" ? match.homeTeam : match.awayTeam
       const goalTypeText =
         goalForm.type === "penalty" ? "PENALTY GOAL" : goalForm.type === "own_goal" ? "OWN GOAL" : "GOAL"
-      showNotification(`⚽ ${goalTypeText}! ${player.name} (${teamName}) - ${currentMinute}'`)
-      addRecentEvent("goal", `${player.name} scored for ${teamName}`)
+      showNotification(`✅ ${goalTypeText} details completed! ${player.name} (${teamName})`)
+      addRecentEvent("goal_completed", `${player.name} scored for ${teamName}`)
 
       setIsGoalDialogOpen(false)
       setGoalForm({
@@ -480,8 +581,8 @@ export default function LiveMatchControl({
         assistPlayerId: "",
       })
     } catch (error) {
-      console.error(`❌ Failed to add goal to match ${match.id}:`, error)
-      showNotification("❌ Failed to add goal")
+      console.error(`❌ Failed to complete goal details for match ${match.id}:`, error)
+      showNotification("❌ Failed to complete goal details")
     }
   }
 
@@ -526,6 +627,39 @@ export default function LiveMatchControl({
     }
   }
 
+  const handleTimeEdit = async () => {
+    const newState = {
+      ...matchState,
+      currentMinute: timeEditForm.currentMinute,
+      period: timeEditForm.period as MatchState["period"],
+      addedTime: {
+        ...matchState.addedTime,
+        [matchState.period === "First Half"
+          ? "firstHalf"
+          : matchState.period === "Second Half"
+            ? "secondHalf"
+            : matchState.period === "Extra Time First"
+              ? "extraTimeFirst"
+              : "extraTimeSecond"]: timeEditForm.addedTime,
+      },
+    }
+
+    setMatchState(newState)
+    await saveMatchState(newState)
+    setIsTimeEditDialogOpen(false)
+    showNotification("✅ Match time updated")
+    addRecentEvent("time_edit", `Time adjusted to ${timeEditForm.currentMinute}'`)
+  }
+
+  const openTimeEditDialog = () => {
+    setTimeEditForm({
+      currentMinute: matchState.currentMinute,
+      period: matchState.period,
+      addedTime: getCurrentAddedTime(),
+    })
+    setIsTimeEditDialogOpen(true)
+  }
+
   const getDisplayMinute = () => {
     const addedTime = getCurrentAddedTime()
     if (addedTime > 0) {
@@ -534,13 +668,21 @@ export default function LiveMatchControl({
     return matchState.currentMinute.toString()
   }
 
-  const canStart = matchState.status === "Lineup Set" || matchState.status === "Scheduled"
+  const canStart = ["Lineup Set", "Scheduled"].includes(matchState.status)
   const canPause = matchState.running
   const canResume = !matchState.running && matchState.status === "Live"
   const canStartSecondHalf = matchState.period === "Half Time"
   const canStartExtraTime = matchState.period === "Full Time"
   const canStartExtraTimeSecond = matchState.period === "Extra Time Break"
-  const canEnd = matchState.status === "Live" && !matchState.running
+  const canEnd = matchState.status === "Live"
+
+  // Replace the existing timer useEffect with this:
+  const matchClock = useLiveMatchClock({
+    matchId: match.id,
+    startTime: matchState.startTime || null,
+    isLive: matchState.status === "Live",
+    extraTime: getCurrentAddedTime(),
+  })
 
   if (!isInitialized) {
     return (
@@ -557,7 +699,10 @@ export default function LiveMatchControl({
     <div className="space-y-6">
       {/* Match ID Display */}
       <Card className="p-2 bg-blue-50 border-blue-200">
-        <div className="text-center text-sm font-medium text-blue-800">Live Control - Match ID: {match.id}</div>
+        <div className="text-center text-sm font-medium text-blue-800">
+          Live Control - Match ID: {match.id} | Global Timer:{" "}
+          {matchTimerManager.getActiveTimers().includes(match.id) ? "ACTIVE" : "INACTIVE"}
+        </div>
       </Card>
 
       {/* Notification Bar */}
@@ -573,9 +718,21 @@ export default function LiveMatchControl({
       {/* Main Match Display */}
       <Card className="p-6 border-2 border-green-500">
         <div className="text-center space-y-4">
-          {/* Live Timer */}
+          {/* Enhanced Timer Display with Match ID */}
           <div className="relative">
-            <div className="text-7xl font-bold text-green-600 mb-2 font-mono">{getDisplayMinute()}'</div>
+            <div className="flex items-center justify-center gap-2">
+              <div className="text-7xl font-bold text-green-600 mb-2 font-mono">{getDisplayMinute()}'</div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={openTimeEditDialog}
+                className="mb-2"
+                disabled={matchState.running}
+                title={`Edit time for Match ${match.id}`}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+            </div>
             <Badge variant={matchState.running ? "destructive" : "secondary"} className="text-xl px-6 py-3">
               {matchState.period}
             </Badge>
@@ -589,14 +746,104 @@ export default function LiveMatchControl({
             {matchState.status === "Live" && (
               <div className="text-sm text-green-600 mt-2 flex items-center justify-center gap-2">
                 <Whistle className="h-4 w-4" />
-                <span className="font-semibold">LIVE MATCH</span>
+                <span className="font-semibold">LIVE MATCH #{match.id}</span>
               </div>
             )}
+            {/* Match-specific timer indicator */}
+            <div className="text-xs text-muted-foreground mt-1">
+              Timer ID: {match.id} | Running: {matchState.running ? "YES" : "NO"} | Global:{" "}
+              {matchTimerManager.getActiveTimers().includes(match.id) ? "ACTIVE" : "INACTIVE"}
+            </div>
           </div>
 
           {/* Score Display */}
           <div className="text-6xl font-bold font-mono">
             {match.homeScore || 0} - {match.awayScore || 0}
+          </div>
+
+          {/* Goals Display */}
+          <div className="grid grid-cols-2 gap-4 mt-4">
+            {/* Home Team Goals */}
+            <div className="text-center">
+              <h4 className="text-sm font-semibold text-blue-600 mb-2">{match.homeTeam} Goals</h4>
+              <div className="space-y-1">
+                {matchGoals
+                  .filter((goal) => goal.team === "home")
+                  .sort((a, b) => a.minute - b.minute)
+                  .map((goal) => (
+                    <div key={goal.id} className="text-xs bg-blue-50 p-2 rounded flex justify-between items-center">
+                      <div>
+                        <div className="font-medium">{goal.playerName}</div>
+                        <div className="text-blue-600">
+                          {goal.minute}' {goal.type === "penalty" ? "(P)" : goal.type === "own_goal" ? "(OG)" : ""}
+                        </div>
+                        {goal.assistPlayerName && (
+                          <div className="text-blue-500 text-xs">Assist: {goal.assistPlayerName}</div>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 w-6 p-0"
+                          onClick={() => handleUpdateGoal(goal.id, goal)}
+                        >
+                          ✏️
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 w-6 p-0"
+                          onClick={() => handleDeleteGoal(goal.id)}
+                        >
+                          🗑️
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+
+            {/* Away Team Goals */}
+            <div className="text-center">
+              <h4 className="text-sm font-semibold text-red-600 mb-2">{match.awayTeam} Goals</h4>
+              <div className="space-y-1">
+                {matchGoals
+                  .filter((goal) => goal.team === "away")
+                  .sort((a, b) => a.minute - b.minute)
+                  .map((goal) => (
+                    <div key={goal.id} className="text-xs bg-red-50 p-2 rounded flex justify-between items-center">
+                      <div>
+                        <div className="font-medium">{goal.playerName}</div>
+                        <div className="text-red-600">
+                          {goal.minute}' {goal.type === "penalty" ? "(P)" : goal.type === "own_goal" ? "(OG)" : ""}
+                        </div>
+                        {goal.assistPlayerName && (
+                          <div className="text-red-500 text-xs">Assist: {goal.assistPlayerName}</div>
+                        )}
+                      </div>
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 w-6 p-0"
+                          onClick={() => handleUpdateGoal(goal.id, goal)}
+                        >
+                          ✏️
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-6 w-6 p-0"
+                          onClick={() => handleDeleteGoal(goal.id)}
+                        >
+                          🗑️
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
           </div>
 
           {/* Teams */}
@@ -617,23 +864,25 @@ export default function LiveMatchControl({
       <div className="grid grid-cols-2 gap-4">
         <Button
           onClick={() => handleQuickGoal("home")}
-          className="h-20 text-xl bg-blue-600 hover:bg-blue-700 font-bold"
+          className="h-20 text-xl bg-blue-600 hover:bg-blue-700 font-bold disabled:opacity-50"
           disabled={!matchState.running}
         >
           <Target className="h-8 w-8 mr-3" />
           GOAL
           <br />
           {match.homeTeam}
+          {!matchState.running && <div className="text-xs mt-1">Clock not running</div>}
         </Button>
         <Button
           onClick={() => handleQuickGoal("away")}
-          className="h-20 text-xl bg-red-600 hover:bg-red-700 font-bold"
+          className="h-20 text-xl bg-red-600 hover:bg-red-700 font-bold disabled:opacity-50"
           disabled={!matchState.running}
         >
           <Target className="h-8 w-8 mr-3" />
           GOAL
           <br />
           {match.awayTeam}
+          {!matchState.running && <div className="text-xs mt-1">Clock not running</div>}
         </Button>
       </div>
 
@@ -811,27 +1060,150 @@ export default function LiveMatchControl({
         </div>
       </Card>
 
-      {/* Recent Events Feed */}
-      {recentEvents.length > 0 && (
+      {/* Enhanced Events Feed */}
+      {matchEvents.length > 0 && (
         <Card className="p-4">
-          <h3 className="font-semibold mb-4">Recent Events (Match {match.id})</h3>
+          <h3 className="font-semibold mb-4">Match Events Timeline (Match {match.id})</h3>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {matchEvents
+              .sort((a, b) => b.minute - a.minute)
+              .map((event) => (
+                <div key={event.id} className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{event.description}</span>
+                      {event.type === "goal" && (
+                        <Badge variant="secondary" className="text-xs">
+                          {event.team === "home" ? match.homeTeam : match.awayTeam}
+                        </Badge>
+                      )}
+                    </div>
+                    {event.playerName && event.playerName !== "TBD" && (
+                      <div className="text-sm text-muted-foreground">Player: {event.playerName}</div>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-green-600">{event.minute}'</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-6 w-6 p-0"
+                      onClick={() => handleDeleteEvent(event.id)}
+                    >
+                      🗑️
+                    </Button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Pending Goals */}
+      {pendingGoals.length > 0 && (
+        <Card className="p-4 border-orange-200 bg-orange-50">
+          <h3 className="font-semibold mb-4 text-orange-800">⏳ Pending Goal Details</h3>
           <div className="space-y-2">
-            {recentEvents.map((event) => (
-              <div key={event.id} className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                <span className="font-medium">{event.description}</span>
-                <span className="font-bold text-green-600">{event.minute}'</span>
+            {pendingGoals.map((pendingGoal) => (
+              <div
+                key={pendingGoal.id}
+                className="flex justify-between items-center p-3 bg-orange-100 rounded-lg border border-orange-200"
+              >
+                <span className="font-medium text-orange-900">
+                  Goal by {pendingGoal.team === "home" ? match.homeTeam : match.awayTeam} - Details TBD
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-orange-700">{pendingGoal.minute}'</span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setGoalForm({ ...goalForm, team: pendingGoal.team })
+                      setIsGoalDialogOpen(true)
+                    }}
+                    className="text-orange-700 border-orange-300 hover:bg-orange-200"
+                  >
+                    Complete Details
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
         </Card>
       )}
 
+      {/* Time Edit Dialog */}
+      <Dialog open={isTimeEditDialogOpen} onOpenChange={setIsTimeEditDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Match Time</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Current Minute</label>
+              <Input
+                type="number"
+                value={timeEditForm.currentMinute}
+                onChange={(e) =>
+                  setTimeEditForm({ ...timeEditForm, currentMinute: Number.parseInt(e.target.value) || 0 })
+                }
+                min="0"
+                max="150"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">Period</label>
+              <Select
+                value={timeEditForm.period}
+                onValueChange={(value: MatchState["period"]) => setTimeEditForm({ ...timeEditForm, period: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="First Half">First Half</SelectItem>
+                  <SelectItem value="Half Time">Half Time</SelectItem>
+                  <SelectItem value="Second Half">Second Half</SelectItem>
+                  <SelectItem value="Full Time">Full Time</SelectItem>
+                  <SelectItem value="Extra Time First">Extra Time First</SelectItem>
+                  <SelectItem value="Extra Time Break">Extra Time Break</SelectItem>
+                  <SelectItem value="Extra Time Second">Extra Time Second</SelectItem>
+                  <SelectItem value="Finished">Finished</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">Added Time (minutes)</label>
+              <Input
+                type="number"
+                value={timeEditForm.addedTime}
+                onChange={(e) => setTimeEditForm({ ...timeEditForm, addedTime: Number.parseInt(e.target.value) || 0 })}
+                min="0"
+                max="15"
+              />
+            </div>
+
+            <div className="flex gap-2">
+              <Button onClick={handleTimeEdit} className="flex-1">
+                Update Time
+              </Button>
+              <Button variant="outline" onClick={() => setIsTimeEditDialogOpen(false)} className="flex-1">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Goal Dialog */}
       <Dialog open={isGoalDialogOpen} onOpenChange={setIsGoalDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="text-xl">
-              ⚽ Add Goal - {getDisplayMinute()}' (Match {match.id})
+              ⚽ {pendingGoals.some((pg) => pg.team === goalForm.team) ? "Complete Goal Details" : "Add Goal"} -{" "}
+              {getDisplayMinute()}' (Match {match.id})
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -911,6 +1283,7 @@ export default function LiveMatchControl({
           </div>
         </DialogContent>
       </Dialog>
+      <MatchTimerDebug />
     </div>
   )
 }

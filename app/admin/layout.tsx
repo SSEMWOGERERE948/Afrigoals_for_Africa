@@ -9,7 +9,8 @@ import {
   Trophy,
   Calendar,
   Settings,
-  UserPlus
+  UserPlus,
+  Store
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -26,6 +27,7 @@ export default function AdminLayout({
     { name: "Transfers", href: "/admin/transfers", icon: ArrowLeftRight },
     { name: "Matches", href: "/admin/matches", icon: Trophy },
     { name: "Fixtures", href: "/admin/fixtures", icon: Calendar },
+      { name: "Store", href: "/admin/products", icon: Store },
     { name: "Settings", href: "/admin/settings", icon: Settings },
   ];
 
