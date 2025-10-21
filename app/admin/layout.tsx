@@ -10,7 +10,8 @@ import {
   Calendar,
   Settings,
   UserPlus,
-  Store
+  Store,
+  UserCheck
 } from "lucide-react";
 
 export default function AdminLayout({
@@ -22,11 +23,12 @@ export default function AdminLayout({
 
   const navigation = [
     { name: "Teams", href: "/admin/teams", icon: Users },
+    { name: "Managers", href: "/admin/managers", icon: UserCheck },
     { name: "Players", href: "/admin/players", icon: UserPlus },
     { name: "News", href: "/admin/news", icon: Newspaper },
     { name: "Transfers", href: "/admin/transfers", icon: ArrowLeftRight },
-    { name: "Matches", href: "/admin/matches", icon: Trophy },
-    { name: "Fixtures", href: "/admin/fixtures", icon: Calendar },
+    { name: "Futsal", href: "/admin/futsal", icon: Trophy },
+    { name: "Fixtures", href: "/admin/matches", icon: Calendar },
       { name: "Store", href: "/admin/products", icon: Store },
     { name: "Settings", href: "/admin/settings", icon: Settings },
   ];
@@ -41,7 +43,7 @@ export default function AdminLayout({
           </div>
           <nav className="space-y-1 px-2">
             {navigation.map((item) => {
-              const isActive = pathname === item.href;
+              const active = pathname === item.href;
               const Icon = item.icon;
               return (
                 <Link
@@ -49,7 +51,7 @@ export default function AdminLayout({
                   href={item.href}
                   className={`
                     flex items-center px-3 py-2 text-sm font-medium rounded-md
-                    ${isActive 
+                    ${active 
                       ? "bg-green-600 text-white" 
                       : "text-foreground hover:bg-accent"
                     }

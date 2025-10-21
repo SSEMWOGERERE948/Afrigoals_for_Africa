@@ -12,6 +12,7 @@ import ProductCard from "@/components/ecommerce/product-card"
 import { CartSidebar } from "@/components/ecommerce/cart-sidebar"
 import { useCartStore } from "@/lib/cart-store"
 import type { Product, ProductCategory, Team } from "@/app/types"
+import { getAllProducts } from "../api/products/route"
 
 export default function StorePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -35,15 +36,69 @@ export default function StorePage() {
   const fetchProducts = async () => {
     try {
       setLoading(true)
-      const response = await fetch("/api/products")
-      const data = await response.json()
+      const data = await getAllProducts()
 
-      setProducts(data.products || [])
-      setCategories(data.categories || [])
-      setTeams(data.teams || [])
-      setFilteredProducts(data.products || [])
+      // Transform categories to match ProductCategory type
+      const transformedCategories: ProductCategory[] = (data.categories || []).map((category: any) => ({
+        ...category,
+        description: category.description || "",
+        parentId: category.parentId || undefined,
+        imageUrl: category.imageUrl || undefined,
+        sortOrder: category.sortOrder || 0,
+        createdAt: category.createdAt ? new Date(category.createdAt) : new Date(),
+        updatedAt: category.updatedAt ? new Date(category.updatedAt) : new Date(),
+      }))
+
+      // Transform teams to match Team type
+      const transformedTeams: Team[] = (data.teams || []).map((team: any) => ({
+        ...team,
+        teamType: team.teamType || "club",
+        founded: team.founded || new Date().getFullYear(),
+        stadium: team.stadium || "",
+        manager: team.manager || "",
+        players: team.players || [],
+        stats: team.stats || {
+          position: 0,
+          played: 0,
+          won: 0,
+          drawn: 0,
+          lost: 0,
+          goalsFor: 0,
+          goalsAgainst: 0,
+          points: 0,
+        },
+      }))
+
+      // Transform products to match Product type
+      const transformedProducts: Product[] = (data.products || []).map((product: any) => ({
+        ...product,
+        category: transformedCategories.find((c) => c.id === product.categoryId) || {
+          // id: product.categoryId || "",
+          // name: "Unknown Category",
+          slug: "unknown",
+          active: true,
+          description: "",
+          sortOrder: 0,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        team: transformedTeams.find((t) => t.id === product.teamId),
+        variants: product.variants || [],
+        createdAt: product.createdAt ? new Date(product.createdAt) : new Date(),
+        updatedAt: product.updatedAt ? new Date(product.updatedAt) : new Date(),
+      }))
+
+      setProducts(transformedProducts)
+      setCategories(transformedCategories)
+      setTeams(transformedTeams)
+      setFilteredProducts(transformedProducts)
     } catch (error) {
       console.error("Error fetching products:", error)
+      // Set empty arrays as fallback
+      setProducts([])
+      setCategories([])
+      setTeams([])
+      setFilteredProducts([])
     } finally {
       setLoading(false)
     }
@@ -62,9 +117,9 @@ export default function StorePage() {
       )
     }
 
-    // Category filter
+    // Category filter - FIXED: use categoryId instead of id
     if (selectedCategory !== "all") {
-      filtered = filtered.filter((product) => product.id === selectedCategory)
+      filtered = filtered.filter((product) => product.category?.id === selectedCategory)
     }
 
     // Team filter
@@ -73,7 +128,7 @@ export default function StorePage() {
     }
 
     // Only show active products
-    filtered = filtered.filter((product) => product.isActive)
+    filtered = filtered.filter((product) => product.active)
 
     // Sort
     switch (sortBy) {
@@ -93,7 +148,7 @@ export default function StorePage() {
         filtered.sort((a, b) => b.reviewCount - a.reviewCount)
         break
       default: // featured
-        filtered.sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0))
+        filtered.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0))
     }
 
     setFilteredProducts(filtered)
@@ -180,7 +235,7 @@ export default function StorePage() {
               <Trophy className="h-5 w-5 text-green-600" />
               <div>
                 <p className="text-sm text-muted-foreground">Featured</p>
-                <p className="text-2xl font-bold">{products.filter((p) => p.isFeatured).length}</p>
+                <p className="text-2xl font-bold">{products.filter((p) => p.featured).length}</p>
               </div>
             </div>
           </CardContent>

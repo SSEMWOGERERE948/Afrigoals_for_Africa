@@ -67,7 +67,7 @@ export default function ProductCard({ product, showTeamBadge = true }: ProductCa
                   -{discountPercentage}%
                 </Badge>
               )}
-              {product.isFeatured && (
+              {product.featured && (
                 <Badge variant="secondary" className="text-xs">
                   Featured
                 </Badge>

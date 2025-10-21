@@ -15,6 +15,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Plus, Edit, Trash2, Package, DollarSign, TrendingUp, Eye, Search, Save, X } from "lucide-react"
 import Image from "next/image"
+import { fetchAllTeams } from "@/components/team_api"
+import { toast } from "sonner"
+import { createProduct, deleteProduct, getAllProducts, getProductById, updateProduct } from "@/app/api/products/route"
 
 interface Product {
   id: string
@@ -28,8 +31,8 @@ interface Product {
   categoryId: string
   teamId?: string
   tags: string[]
-  isFeatured: boolean
-  isActive: boolean
+  featured: boolean
+  active: boolean
   rating: number
   reviewCount: number
   createdAt: Date
@@ -40,7 +43,7 @@ interface Category {
   id: string
   name: string
   slug: string
-  isActive: boolean
+  active: boolean
 }
 
 interface Team {
@@ -71,27 +74,45 @@ export default function ProductManagement() {
     categoryId: "",
     teamId: "",
     tags: "",
-    isFeatured: false,
-    isActive: true,
+    featured: false,
+    active: true,
     images: [""],
   })
 
   useEffect(() => {
     fetchProducts()
+    fetchTeamsData()
   }, [])
 
   const fetchProducts = async () => {
     try {
       setLoading(true)
-      const response = await fetch("/api/products")
-      const data = await response.json()
+      const data = await getAllProducts()
       setProducts(data.products || [])
       setCategories(data.categories || [])
-      setTeams(data.teams || [])
+
+      // Don't overwrite teams if we already loaded them from fetchAllTeams
+      if (data.teams && data.teams.length > 0 && teams.length === 0) {
+        setTeams(data.teams || [])
+      }
+
+      console.log("✅ Products loaded:", data.products?.length || 0)
     } catch (error) {
-      console.error("Error fetching products:", error)
+      console.error("❌ Error fetching products:", error)
+      toast.error("Failed to load products")
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchTeamsData = async () => {
+    try {
+      const teamData = await fetchAllTeams()
+      setTeams(teamData)
+      console.log("✅ Teams loaded:", teamData.length)
+    } catch (error) {
+      console.error("❌ Failed to fetch teams:", error)
+      toast.error("Failed to load teams")
     }
   }
 
@@ -101,6 +122,7 @@ export default function ProductManagement() {
     try {
       const productData = {
         ...formData,
+        teamId: formData.teamId === "none" ? "" : formData.teamId,
         price: Number.parseFloat(formData.price),
         originalPrice: formData.originalPrice ? Number.parseFloat(formData.originalPrice) : undefined,
         stock: Number.parseInt(formData.stock),
@@ -108,26 +130,39 @@ export default function ProductManagement() {
         images: formData.images.filter((img) => img.trim() !== ""),
       }
 
-      const url = editingProduct ? `/api/products/${editingProduct.id}` : "/api/products"
-      const method = editingProduct ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(productData),
-      })
-
-      if (response.ok) {
-        await fetchProducts()
-        resetForm()
-        setIsDialogOpen(false)
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, productData)
+        toast.success("Product updated successfully")
+      } else {
+        await createProduct(productData)
+        toast.success("Product created successfully")
       }
+
+      await fetchProducts()
+      resetForm()
+      setIsDialogOpen(false)
     } catch (error) {
       console.error("Error saving product:", error)
+      toast.error(editingProduct ? "Failed to update product" : "Failed to create product")
     }
   }
 
-  const handleEdit = (product: Product) => {
+  const handleEdit = async (productOrId: Product | string) => {
+    let product: Product
+
+    if (typeof productOrId === "string") {
+      try {
+        const response = await getProductById(productOrId)
+        product = response.product
+      } catch (error) {
+        console.error("Failed to fetch product by ID", error)
+        toast.error("Failed to load product details")
+        return
+      }
+    } else {
+      product = productOrId
+    }
+
     setEditingProduct(product)
     setFormData({
       name: product.name,
@@ -139,8 +174,8 @@ export default function ProductManagement() {
       categoryId: product.categoryId,
       teamId: product.teamId || "",
       tags: product.tags.join(", "),
-      isFeatured: product.isFeatured,
-      isActive: product.isActive,
+      featured: product.featured,
+      active: product.active,
       images: product.images.length > 0 ? product.images : [""],
     })
     setIsDialogOpen(true)
@@ -150,15 +185,12 @@ export default function ProductManagement() {
     if (!confirm("Are you sure you want to delete this product?")) return
 
     try {
-      const response = await fetch(`/api/products/${productId}`, {
-        method: "DELETE",
-      })
-
-      if (response.ok) {
-        await fetchProducts()
-      }
+      await deleteProduct(productId)
+      await fetchProducts()
+      toast.success("Product deleted successfully")
     } catch (error) {
       console.error("Error deleting product:", error)
+      toast.error("Failed to delete product")
     }
   }
 
@@ -173,8 +205,8 @@ export default function ProductManagement() {
       categoryId: "",
       teamId: "",
       tags: "",
-      isFeatured: false,
-      isActive: true,
+      featured: false,
+      active: true,
       images: [""],
     })
     setEditingProduct(null)
@@ -209,8 +241,8 @@ export default function ProductManagement() {
 
   const stats = {
     total: products.length,
-    active: products.filter((p) => p.isActive).length,
-    featured: products.filter((p) => p.isFeatured).length,
+    active: products.filter((p) => p.active).length,
+    featured: products.filter((p) => p.featured).length,
     lowStock: products.filter((p) => p.stock < 10).length,
   }
 
@@ -295,7 +327,7 @@ export default function ProductManagement() {
 
                 {/* Categories and Teams */}
                 <div className="space-y-4">
-                  <div>
+                  {/* <div>
                     <Label htmlFor="categoryId">Category *</Label>
                     <Select
                       value={formData.categoryId}
@@ -312,7 +344,7 @@ export default function ProductManagement() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
+                  </div> */}
 
                   <div>
                     <Label htmlFor="teamId">Team (Optional)</Label>
@@ -321,17 +353,30 @@ export default function ProductManagement() {
                       onValueChange={(value) => setFormData((prev) => ({ ...prev, teamId: value }))}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select team" />
+                        <SelectValue placeholder="Select a team" />
                       </SelectTrigger>
+
                       <SelectContent>
                         <SelectItem value="none">No Team</SelectItem>
-                        {teams.map((team) => (
-                          <SelectItem key={team.id} value={team.id}>
-                            {team.name}
+
+                        {teams && teams.length > 0 ? (
+                          teams.map((team) => (
+                            <SelectItem key={team.id} value={String(team.id)}>
+                              {team.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="loading" disabled>
+                            Loading teams...
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
+                    {teams.length === 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Loading teams... If teams don't appear, please refresh.
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -347,24 +392,24 @@ export default function ProductManagement() {
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
                       <Checkbox
-                        id="isFeatured"
-                        checked={formData.isFeatured}
+                        id="featured"
+                        checked={formData.featured}
                         onCheckedChange={(checked) =>
-                          setFormData((prev) => ({ ...prev, isFeatured: checked as boolean }))
+                          setFormData((prev) => ({ ...prev, featured: checked as boolean }))
                         }
                       />
-                      <Label htmlFor="isFeatured">Featured Product</Label>
+                      <Label htmlFor="featured">Featured Product</Label>
                     </div>
 
                     <div className="flex items-center space-x-2">
                       <Checkbox
-                        id="isActive"
-                        checked={formData.isActive}
+                        id="active"
+                        checked={formData.active}
                         onCheckedChange={(checked) =>
-                          setFormData((prev) => ({ ...prev, isActive: checked as boolean }))
+                          setFormData((prev) => ({ ...prev, active: checked as boolean }))
                         }
                       />
-                      <Label htmlFor="isActive">Active</Label>
+                      <Label htmlFor="active">Active</Label>
                     </div>
                   </div>
                 </div>
@@ -517,7 +562,7 @@ export default function ProductManagement() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
-                  <TableHead>Category</TableHead>
+                  {/* <TableHead>Category</TableHead> */}
                   <TableHead>Price</TableHead>
                   <TableHead>Stock</TableHead>
                   <TableHead>Status</TableHead>
@@ -525,61 +570,69 @@ export default function ProductManagement() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredProducts.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <div className="relative h-12 w-12 flex-shrink-0">
-                          <Image
-                            src={product.images[0] || "/placeholder.svg?height=48&width=48"}
-                            alt={product.name}
-                            fill
-                            className="object-cover rounded"
-                          />
+                {filteredProducts.length > 0 ? (
+                  filteredProducts.map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="relative h-12 w-12 flex-shrink-0">
+                            <Image
+                              src={product.images[0] || "/placeholder.svg?height=48&width=48"}
+                              alt={product.name}
+                              fill
+                              className="object-cover rounded"
+                            />
+                          </div>
+                          <div>
+                            <p className="font-medium">{product.name}</p>
+                            <p className="text-sm text-muted-foreground">{product.sku}</p>
+                          </div>
                         </div>
+                      </TableCell>
+                      {/* <TableCell>{categories.find((c) => c.id === product.categoryId)?.name || "Unknown"}</TableCell> */}
+                      <TableCell>
                         <div>
-                          <p className="font-medium">{product.name}</p>
-                          <p className="text-sm text-muted-foreground">{product.sku}</p>
+                          <p className="font-semibold">UGX {product.price.toLocaleString()}</p>
+                          {product.originalPrice && (
+                            <p className="text-sm text-muted-foreground line-through">
+                              UGX {product.originalPrice.toLocaleString()}
+                            </p>
+                          )}
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{categories.find((c) => c.id === product.categoryId)?.name || "Unknown"}</TableCell>
-                    <TableCell>
-                      <div>
-                        <p className="font-semibold">UGX {product.price.toLocaleString()}</p>
-                        {product.originalPrice && (
-                          <p className="text-sm text-muted-foreground line-through">
-                            UGX {product.originalPrice.toLocaleString()}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={product.stock < 10 ? "destructive" : "secondary"}>{product.stock} units</Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-1">
-                        {product.isActive && <Badge variant="secondary">Active</Badge>}
-                        {product.isFeatured && <Badge variant="default">Featured</Badge>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleEdit(product)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDelete(product.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={product.stock < 10 ? "destructive" : "secondary"}>{product.stock} units</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {product.active && <Badge variant="secondary">Active</Badge>}
+                          {product.featured && <Badge variant="default">Featured</Badge>}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => handleEdit(product)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDelete(product.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No products found. Add your first product using the button above.
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           )}

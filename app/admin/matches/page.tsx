@@ -298,7 +298,7 @@ export default function MatchScheduling() {
 
     try {
       const updatedMatchData: MatchUpdateRequest = {
-        status: "Lineup Set",
+        status: "Scheduled",
         homeLineup: {
           formation: matchLineup.homeLineup.formation,
           coach: matchLineup.homeLineup.coach,
@@ -343,7 +343,7 @@ export default function MatchScheduling() {
   }
 
   const getEligibleMatches = () => {
-    return matches.filter((match) => match.status === "Lineup Set" || match.status === "Live")
+    return matches.filter((match) => match.status === "Scheduled" || match.status === "Live")
   }
 
   const getSelectedLiveMatch = () => {
@@ -369,8 +369,9 @@ export default function MatchScheduling() {
             leagues={leagues}
             onSelectMatch={handleSelectMatch}
             onDeleteMatch={handleDeleteMatch}
-            onSelectLiveMatch={handleSelectLiveMatch}
-          />
+            onSelectLiveMatch={handleSelectLiveMatch} onStartMatch={function (matchId: string): void {
+              throw new Error("Function not implemented.")
+            } }          />
         </TabsContent>
 
         <TabsContent value="lineup" className="space-y-6">

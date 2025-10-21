@@ -2,6 +2,7 @@
 
 import { matchTimerManager } from "@/lib/match-timer-manager"
 import { useEffect, useState, useCallback } from "react"
+import type { MatchState } from "@/app/types"
 
 type MatchStatus =
   | "Not Started"
@@ -11,183 +12,120 @@ type MatchStatus =
   | "Full Time"
   | "Extra Time"
   | "Penalties"
+  | "Finished" // Added Finished status
 
 interface UseLiveMatchClockOptions {
   matchId: string // Add match ID to make it specific
-  startTime: Date | null
-  isLive: boolean
-  extraTime?: number
 }
 
 interface MatchClock {
-  minute: number
+  period: ReactNode
+  minutes: number // For display
+  seconds: number // For display
+  totalSeconds: number // The official total seconds from matchState
   phase: MatchStatus
-  startClock: () => void
-  stopClock: () => void
-  resetClock: () => void
   running: boolean
+  // Removed startClock, stopClock, resetClock as they are now controlled externally by LiveMatchControl
 }
 
-export default function useLiveMatchClock({
-  matchId,
-  startTime,
-  isLive,
-  extraTime = 0,
-}: UseLiveMatchClockOptions): MatchClock {
-  const [minute, setMinute] = useState(0)
+export default function useLiveMatchClock({ matchId }: UseLiveMatchClockOptions): MatchClock {
+  // Internal state for granular display, synced with matchState.currentMinute (total seconds)
+  const [totalSecondsElapsed, setTotalSecondsElapsed] = useState(0)
   const [phase, setPhase] = useState<MatchStatus>("Not Started")
   const [running, setIsRunning] = useState(false)
-  const [half, setHalf] = useState<1 | 2>(1)
-
-  // Get initial state from global timer manager
-  useEffect(() => {
-    console.log(`🔄 Initializing clock for match ${matchId}`)
-
-    // Check if there's existing global state for this match
-    const globalState = matchTimerManager.getMatchState(matchId)
-    if (globalState) {
-      console.log(`✅ Found existing global state for match ${matchId}:`, globalState)
-      setMinute(globalState.currentMinute)
-      setIsRunning(globalState.running)
-
-      // Convert global state to local phase
-      if (globalState.period === "First Half") {
-        setPhase(globalState.running ? "Live First Half" : "Not Started")
-        setHalf(1)
-      } else if (globalState.period === "Half Time") {
-        setPhase("Half Time")
-        setHalf(2)
-      } else if (globalState.period === "Second Half") {
-        setPhase(globalState.running ? "Live Second Half" : "Half Time")
-        setHalf(2)
-      } else if (globalState.period === "Full Time") {
-        setPhase("Full Time")
-      }
-    } else if (startTime && isLive) {
-      // Calculate elapsed time from start time
-      const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 60000)
-      setMinute(elapsed)
-
-      if (elapsed < 45) {
-        setPhase("Live First Half")
-        setHalf(1)
-        setIsRunning(true)
-      } else if (elapsed < 60) {
-        setPhase("Half Time")
-        setHalf(2)
-        setIsRunning(false)
-      } else if (elapsed < 90 + extraTime) {
-        setPhase("Live Second Half")
-        setHalf(2)
-        setIsRunning(true)
-      } else {
-        setPhase("Full Time")
-        setIsRunning(false)
-      }
-    }
-  }, [matchId, startTime, isLive, extraTime])
 
   // Register with global timer manager to receive updates
   useEffect(() => {
-    console.log(`📞 Registering clock callback for match ${matchId}`)
+    console.log(`📞 useLiveMatchClock: Registering clock callback for match ${matchId}`)
 
-    const handleGlobalUpdate = (globalState: any) => {
-      console.log(`📡 Clock received global update for match ${matchId}:`, globalState)
-
-      setMinute(globalState.currentMinute)
+    const handleGlobalUpdate = (globalState: MatchState) => {
+      console.log(`📡 useLiveMatchClock: Clock received global update for match ${matchId}:`, globalState)
+      setTotalSecondsElapsed(globalState.currentMinute) // currentMinute is total seconds
       setIsRunning(globalState.running)
 
-      // Update phase based on global state
-      if (globalState.period === "First Half") {
-        setPhase(globalState.running ? "Live First Half" : "Not Started")
-        setHalf(1)
-      } else if (globalState.period === "Half Time") {
-        setPhase("Half Time")
-        setHalf(2)
-      } else if (globalState.period === "Second Half") {
-        setPhase(globalState.running ? "Live Second Half" : "Half Time")
-        setHalf(2)
-      } else if (globalState.period === "Full Time") {
+      if (globalState.status === "Finished") {
+        setPhase("Finished")
+      } else if (globalState.currentMinute >= 5400) {
+        // 90+ minutes = second half complete
         setPhase("Full Time")
-      } else if (globalState.period === "Extra Time First") {
+      } else if (globalState.currentMinute >= 2700) {
+        // 45+ minutes = should be second half
+        if (globalState.running) {
+          setPhase("Live Second Half")
+        } else {
+          // If not running but time > 45 min, check if it's actually halftime or full time
+          if (globalState.currentMinute >= 5400) {
+            setPhase("Full Time")
+          } else {
+            setPhase("Half Time") // Paused during second half
+          }
+        }
+      } else if (globalState.currentMinute > 0) {
+        // 0-45 minutes = first half
+        if (globalState.running) {
+          setPhase("Live First Half")
+        } else {
+          setPhase("Half Time") // Paused during first half
+        }
+      } else {
+        setPhase("Not Started")
+      }
+
+      if (globalState.period === "Extra Time First" || globalState.period === "Extra Time Second") {
         setPhase("Extra Time")
-        setHalf(1)
-      } else if (globalState.period === "Extra Time Second") {
-        setPhase("Extra Time")
-        setHalf(2)
-      } else if (globalState.period === "Finished") {
-        setPhase("Full Time")
+      } else if (globalState.period === "Penalty Shootout") {
+        setPhase("Penalties")
       }
     }
 
     // Register callback with global timer manager
     matchTimerManager.registerCallback(matchId, handleGlobalUpdate)
 
+    const syncInitialState = async () => {
+      // Small delay to ensure backend state is ready
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
+      const initialGlobalState = matchTimerManager.getMatchState(matchId)
+      if (initialGlobalState) {
+        console.log(`✅ useLiveMatchClock: Initial state from manager for ${matchId}:`, initialGlobalState)
+        handleGlobalUpdate(initialGlobalState)
+
+        if (initialGlobalState.running && initialGlobalState.currentMinute > 2700) {
+          setTimeout(() => {
+            const recheck = matchTimerManager.getMatchState(matchId)
+            if (recheck) handleGlobalUpdate(recheck)
+          }, 500)
+        }
+      } else {
+        console.log(`⚠️ useLiveMatchClock: No initial global state found in manager for match ${matchId}.`)
+      }
+    }
+
+    syncInitialState()
+
     // Cleanup callback when component unmounts
     return () => {
-      console.log(`📞 Unregistering clock callback for match ${matchId}`)
-      matchTimerManager.unregisterCallback(matchId)
+      console.log(`📞 useLiveMatchClock: Unregistering clock callback for match ${matchId}`)
+      matchTimerManager.unregisterCallback(matchId, handleGlobalUpdate) // Pass the specific callback to unregister
     }
-  }, [matchId])
+  }, [matchId]) // Dependency on matchId
 
-  const startClock = useCallback(() => {
-    console.log(`🚀 Starting clock for match ${matchId}`)
+  const { displayMinutes, displaySeconds } = useCallback((totalSecs: number) => {
+    const minutes = Math.floor(totalSecs / 60)
+    const seconds = totalSecs % 60
+    return { displayMinutes: minutes, displaySeconds: seconds }
+  }, [])(totalSecondsElapsed)
 
-    if (!isLive) {
-      console.log(`❌ Cannot start clock for match ${matchId} - not live`)
-      return
-    }
-
-    const initialState = {
-      status: "Live",
-      currentMinute: minute,
-      period: half === 1 ? "First Half" : "Second Half",
-      running: true,
-      addedTime: {
-        firstHalf: 0,
-        secondHalf: 0,
-        extraTimeFirst: 0,
-        extraTimeSecond: 0,
-      },
-    }
-
-    // Start global timer
-    matchTimerManager.startTimer(matchId, initialState, (updatedState) => {
-      console.log(`⏰ Clock callback for match ${matchId}:`, updatedState)
-      setMinute(updatedState.currentMinute)
-      setIsRunning(updatedState.running)
-    })
-
-    setIsRunning(true)
-    setPhase(half === 1 ? "Live First Half" : "Live Second Half")
-  }, [matchId, isLive, minute, half])
-
-  const stopClock = useCallback(() => {
-    console.log(`⏸️ Stopping clock for match ${matchId}`)
-
-    // Pause the global timer
-    matchTimerManager.pauseMatch(matchId)
-    setIsRunning(false)
-  }, [matchId])
-
-  const resetClock = useCallback(() => {
-    console.log(`🔄 Resetting clock for match ${matchId}`)
-
-    // Stop global timer
-    matchTimerManager.stopTimer(matchId)
-
-    setMinute(0)
-    setHalf(1)
-    setPhase("Not Started")
-    setIsRunning(false)
-  }, [matchId])
+  // Log current state of the hook on every render
+  console.log(
+    `useLiveMatchClock Render: Match ${matchId} - TotalSeconds: ${totalSecondsElapsed}, Running: ${running}, Phase: ${phase}`,
+  )
 
   return {
-    minute,
+    minutes: displayMinutes,
+    seconds: displaySeconds,
+    totalSeconds: totalSecondsElapsed, // The official total seconds
     phase,
-    startClock,
-    stopClock,
-    resetClock,
     running,
   }
 }
