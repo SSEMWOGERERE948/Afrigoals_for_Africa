@@ -1,6 +1,6 @@
 import axios from "axios"
 
-const API_BASE_URL = "http://localhost:8080/api/managers"
+const API_BASE_URL = "https://afrigoals-backend.onrender.com/api/managers"
 
 export interface Manager {
   clubTeam: any

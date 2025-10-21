@@ -12,7 +12,7 @@ import axios from "axios"
 import { fetchFutsalPlayers, fetchFutsalPositions, updateFutsalPlayer, createFutsalPlayer, deleteFutsalPlayer } from "@/lib/players/api"
 
 // Base URL for the API
-const API_BASE_URL = "http://localhost:8080"
+const API_BASE_URL = "https://afrigoals-backend.onrender.com"
 
 interface FutsalPlayersAdminProps {
   teams?: FutsalTeam[]
@@ -69,7 +69,7 @@ export default function FutsalPlayersAdmin({
   const checkConnection = async () => {
     try {
       setConnectionStatus("checking")
-      await axios.get(`http://localhost:8080/api/health`)
+      await axios.get(`https://afrigoals-backend.onrender.com/api/health`)
       setConnectionStatus("connected")
     } catch (error) {
       console.error("Connection check failed:", error)
@@ -355,7 +355,7 @@ export default function FutsalPlayersAdmin({
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-8 w-8 animate-spin text-orange-600" />
-        <span className="ml-2 text-foreground">Loading players from http://localhost:8080...</span>
+        <span className="ml-2 text-foreground">Loading players from https://afrigoals-backend.onrender.com...</span>
       </div>
     )
   }
@@ -406,10 +406,10 @@ export default function FutsalPlayersAdmin({
           <div>
             <h2 className="text-2xl font-bold">Futsal Players</h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Players API: <code className="bg-muted px-2 py-1 rounded">http://localhost:8080/api/futsalplayers</code>
+              Players API: <code className="bg-muted px-2 py-1 rounded">https://afrigoals-backend.onrender.com/api/futsalplayers</code>
             </p>
             <p className="text-sm text-muted-foreground">
-              Positions API: <code className="bg-muted px-2 py-1 rounded">http://localhost:8080/api/players</code>
+              Positions API: <code className="bg-muted px-2 py-1 rounded">https://afrigoals-backend.onrender.com/api/players</code>
             </p>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>

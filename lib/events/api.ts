@@ -1,7 +1,7 @@
 import axios from "axios"
 import type { MatchEvent } from "@/app/types"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/futsal"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://afrigoals-backend.onrender.com/api/futsal"
 
 // Create a match event
 export async function createFutsalMatchEvent(event: Omit<MatchEvent, "id">): Promise<MatchEvent> {

@@ -1,7 +1,7 @@
 import axios from "axios"
 import type { FutsalLeague } from "@/app/types"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/futsalleagues"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://afrigoals-backend.onrender.com/api/futsalleagues"
 
 // Get all futsal leagues
 export async function fetchFutsalLeagues(): Promise<FutsalLeague[]> {

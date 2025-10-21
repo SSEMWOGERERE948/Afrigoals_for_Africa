@@ -1,4 +1,4 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/products"
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://afrigoals-backend.onrender.com/api/products"
 
 export interface Product {
   id: string

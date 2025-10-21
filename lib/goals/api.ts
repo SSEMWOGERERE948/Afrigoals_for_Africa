@@ -1,7 +1,7 @@
 import axios from "axios"
 import type { Goal } from "@/app/types"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/futsal"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://afrigoals-backend.onrender.com/api/futsal"
 
 // Create a goal
 export async function createFutsalGoal(goal: Omit<Goal, "id">): Promise<Goal> {

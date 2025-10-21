@@ -2,7 +2,7 @@
 
 import type { Substitution } from "@/components/substitution-manager"
 
-const API_BASE_URL = "http://localhost:8080/api/substitution"
+const API_BASE_URL = "https://afrigoals-backend.onrender.com/api/substitution"
 
 export async function saveSubstitutions(matchId: string, substitutions: Substitution[]): Promise<void> {
   console.log("Saving substitutions for match:", matchId, substitutions)

@@ -1,7 +1,7 @@
 import axios from "axios"
 import type { Player, Position } from "@/app/types"
 
-const API_BASE_URL = "http://localhost:8080/api/players"
+const API_BASE_URL = "https://afrigoals-backend.onrender.com/api/players"
 
 // Define the player data that we send to the backend (without x, y, and position object)
 interface PlayerCreateData {
