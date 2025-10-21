@@ -81,7 +81,7 @@ export async function updateMatchState(id: string, payload: MatchStateUpdatePayl
       })
     }
     throw error
-  }
+  
 }
 
 // Get match state
