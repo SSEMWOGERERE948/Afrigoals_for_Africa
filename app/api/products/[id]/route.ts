@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const BASE_URL = "https://afrigoals-backend.onrender.com/api/products"
+const BASE_URL = "http://localhost:8080/api/products"
 
 export const getProductById = async (id: string) => {
   const res = await fetch(`${BASE_URL}/${id}`)

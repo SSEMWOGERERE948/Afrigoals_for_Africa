@@ -1,7 +1,7 @@
 import axios from "axios"
 import type { FutsalTeam } from "@/app/types"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://afrigoals-backend.onrender.com/api/futsalteams"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/futsalteams"
 
 // Get all futsal teams
 export async function fetchFutsalTeams(): Promise<FutsalTeam[]> {

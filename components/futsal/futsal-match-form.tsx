@@ -202,7 +202,7 @@ export default function FutsalMatchForm({
 
       console.log("=== CREATING MATCH ===")
       console.log("Match data to be sent:", matchData)
-      console.log("API endpoint:", "https://afrigoals-backend.onrender.com/api/futsalmatches/create")
+      console.log("API endpoint:", "http://localhost:8080/api/futsalmatches/create")
 
       // ALWAYS call the API directly, ignore callbacks for now
       console.log("Calling createFutsalMatch API directly...")
@@ -260,7 +260,7 @@ export default function FutsalMatchForm({
       let errorMessage = "Unknown error occurred"
 
       if (err.code === "ECONNREFUSED") {
-        errorMessage = "Cannot connect to backend server. Please ensure the server is running on https://afrigoals-backend.onrender.com"
+        errorMessage = "Cannot connect to backend server. Please ensure the server is running on http://localhost:8080"
       } else if (err.code === "NETWORK_ERROR") {
         errorMessage = "Network error. Please check your internet connection and server status."
       } else if (err.response?.data?.message) {
@@ -273,7 +273,7 @@ export default function FutsalMatchForm({
 
       // Additional debugging info
       console.log("=== DEBUGGING INFO ===")
-      console.log("Backend URL:", "https://afrigoals-backend.onrender.com/api/futsalmatches")
+      console.log("Backend URL:", "http://localhost:8080/api/futsalmatches")
       console.log("Teams available:", teams.length)
       console.log("Leagues available:", leagues.length)
       console.log("Form data:", formData)

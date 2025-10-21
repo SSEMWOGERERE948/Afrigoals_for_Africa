@@ -2,7 +2,7 @@
 import axios from "axios"
 import type { Match, MatchUpdateRequest, MatchStateUpdatePayload, Goal, MatchEvent } from "@/app/types"
 
-const API_BASE_URL = "https://afrigoals-backend.onrender.com/api/matches"
+const API_BASE_URL = "http://localhost:8080/api/matches"
 
 // Create a new match
 export async function createMatch(match: Omit<Match, "id">): Promise<Match> {
@@ -81,7 +81,7 @@ export async function updateMatchState(id: string, payload: MatchStateUpdatePayl
       })
     }
     throw error
-  
+  }
 }
 
 // Get match state

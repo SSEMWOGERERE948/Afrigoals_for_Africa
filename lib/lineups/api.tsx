@@ -30,7 +30,7 @@ export type LineupSide = "HOME" | "AWAY"
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
-  "https://afrigoals-backend.onrender.com/api/futsalmatches"
+  "http://localhost:8080/api/futsalmatches"
 
 /* ------------- LINE-UP HELPERS --------------- */
 

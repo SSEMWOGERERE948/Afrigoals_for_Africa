@@ -4,9 +4,9 @@ import axios from "axios"
 import type { League, Team } from "@/app/types"
 
 // Backend API base URL
-const API_BASE_URL = "https://afrigoals-backend.onrender.com/api/teams"
-const API_BASE_URL_LEAGUE = "https://afrigoals-backend.onrender.com/api/leagues"
-const API_BASE_URL_MANAGERS = "https://afrigoals-backend.onrender.com/api/managers"
+const API_BASE_URL = "http://localhost:8080/api/teams"
+const API_BASE_URL_LEAGUE = "http://localhost:8080/api/leagues"
+const API_BASE_URL_MANAGERS = "http://localhost:8080/api/managers"
 
 // Manager interface
 export interface Manager {

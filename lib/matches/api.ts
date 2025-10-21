@@ -2,7 +2,7 @@ import axios from "axios"
 
 import type { FutsalGoal, FutsalMatch, FutsalMatchEvent, Goal, MatchEvent, MatchPeriod } from "@/app/types"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://afrigoals-backend.onrender.com/api/futsalmatches"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/futsalmatches"
 
 // Configure axios defaults
 axios.defaults.timeout = 10000 // 10 second timeout

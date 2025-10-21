@@ -1,8 +1,8 @@
 import axios from "axios"
 import type { FutsalPlayer, FutsalPosition } from "@/app/types"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "https://afrigoals-backend.onrender.com/api/futsalplayers"
-const API_BASE_URL_POS = "https://afrigoals-backend.onrender.com/api/players"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080/api/futsalplayers"
+const API_BASE_URL_POS = "http://localhost:8080/api/players"
 
 // Configure axios defaults
 axios.defaults.headers.common["Content-Type"] = "application/json"

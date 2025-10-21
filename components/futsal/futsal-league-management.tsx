@@ -192,7 +192,7 @@ export default function FutsalLeagueManagement({
 
         // Additional debugging info
         if (error.code === "ECONNREFUSED") {
-          setError("Cannot connect to backend server. Please ensure the server is running on https://afrigoals-backend.onrender.com")
+          setError("Cannot connect to backend server. Please ensure the server is running on http://localhost:8080")
         } else if (error.code === "NETWORK_ERROR") {
           setError("Network error. Please check your internet connection and server status.")
         }
