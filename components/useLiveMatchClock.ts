@@ -19,7 +19,7 @@ interface UseLiveMatchClockOptions {
 }
 
 interface MatchClock {
-  period: ReactNode
+  period: MatchStatus
   minutes: number // For display
   seconds: number // For display
   totalSeconds: number // The official total seconds from matchState
@@ -122,6 +122,7 @@ export default function useLiveMatchClock({ matchId }: UseLiveMatchClockOptions)
   )
 
   return {
+    period: phase,
     minutes: displayMinutes,
     seconds: displaySeconds,
     totalSeconds: totalSecondsElapsed, // The official total seconds

@@ -17,7 +17,7 @@ import { Plus, Edit, Trash2, Package, DollarSign, TrendingUp, Eye, Search, Save,
 import Image from "next/image"
 import { fetchAllTeams } from "@/components/team_api"
 import { toast } from "sonner"
-import { createProduct, deleteProduct, getAllProducts, getProductById, updateProduct } from "@/app/api/products/route"
+import { createProduct, deleteProduct, getAllProducts, getProductById, updateProduct } from "@/lib/products/api"
 
 interface Product {
   id: string

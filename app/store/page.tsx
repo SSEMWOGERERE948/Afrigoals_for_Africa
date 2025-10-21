@@ -12,7 +12,7 @@ import ProductCard from "@/components/ecommerce/product-card"
 import { CartSidebar } from "@/components/ecommerce/cart-sidebar"
 import { useCartStore } from "@/lib/cart-store"
 import type { Product, ProductCategory, Team } from "@/app/types"
-import { getAllProducts } from "../api/products/route"
+import { getAllProducts } from "@/lib/products/api"
 
 export default function StorePage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -128,7 +128,7 @@ export default function StorePage() {
     }
 
     // Only show active products
-    filtered = filtered.filter((product) => product.active)
+    filtered = filtered.filter((product) => product.isActive)
 
     // Sort
     switch (sortBy) {
@@ -148,7 +148,7 @@ export default function StorePage() {
         filtered.sort((a, b) => b.reviewCount - a.reviewCount)
         break
       default: // featured
-        filtered.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0))
+        filtered.sort((a, b) => (b.isFeatured ? 1 : 0) - (a.isFeatured ? 1 : 0))
     }
 
     setFilteredProducts(filtered)
@@ -235,7 +235,7 @@ export default function StorePage() {
               <Trophy className="h-5 w-5 text-green-600" />
               <div>
                 <p className="text-sm text-muted-foreground">Featured</p>
-                <p className="text-2xl font-bold">{products.filter((p) => p.featured).length}</p>
+                <p className="text-2xl font-bold">{products.filter((p) => p.isFeatured).length}</p>
               </div>
             </div>
           </CardContent>

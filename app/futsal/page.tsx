@@ -134,6 +134,7 @@ export default function FutsalPage() {
           status: "Live",
           homeScore: 3,
           awayScore: 2,
+          periods: []
         },
         {
           id: "2",
@@ -150,6 +151,7 @@ export default function FutsalPage() {
           status: "Scheduled",
           homeScore: 0,
           awayScore: 0,
+          periods: []
         },
       ]
 

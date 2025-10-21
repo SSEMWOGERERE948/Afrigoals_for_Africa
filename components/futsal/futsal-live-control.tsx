@@ -39,6 +39,21 @@ import {
   updateFutsalMatchPeriods,
 } from "@/lib/matches/api"
 
+// Normalize legacy periods (string[] or MatchPeriod[])
+const normalizePeriods = (input?: MatchPeriod[] | string[]): MatchPeriod[] => {
+  if (!input) return []
+  if (typeof input[0] === "string") {
+    return (input as string[]).map((name, i) => ({
+      id: `${i + 1}`,
+      name,
+      duration: 20, // default 20 min
+      orderIndex: i,
+      breakPeriod: false,
+    }))
+  }
+  return input as MatchPeriod[]
+}
+
 interface FutsalLiveControlEnhancedProps {
   match: FutsalMatch
   homePlayers: FutsalPlayer[]
@@ -69,6 +84,8 @@ export default function FutsalLiveControlEnhanced({
   onStartMatch,
   isAdmin = false,
 }: FutsalLiveControlEnhancedProps) {
+  const normalizedPeriods = normalizePeriods(match.periods)
+
   const [currentMatch, setCurrentMatch] = useState<FutsalMatch>(match)
   const [running, setIsRunning] = useState(false)
   const [currentPeriodElapsedMinute, setCurrentPeriodElapsedMinute] = useState(0)
@@ -82,7 +99,7 @@ export default function FutsalLiveControlEnhanced({
 
   // Duration editing states
   const [isEditingPeriods, setIsEditingPeriods] = useState(false)
-  const [tempPeriods, setTempPeriods] = useState<MatchPeriod[]>(match.periods || [])
+  const [tempPeriods, setTempPeriods] = useState<MatchPeriod[]>(normalizedPeriods)
   const [periodEditError, setPeriodEditError] = useState("")
 
   // Dialog states
@@ -163,7 +180,7 @@ export default function FutsalLiveControlEnhanced({
   // Update local state when match prop changes
   useEffect(() => {
     setCurrentMatch(match)
-    setTempPeriods(match.periods || []) // Initialize temp periods for editing
+    setTempPeriods(normalizePeriods(match.periods))
   }, [match])
 
   // Fetch events when component mounts or match changes
@@ -192,9 +209,10 @@ export default function FutsalLiveControlEnhanced({
     }
 
     const { startTime, status, periods, periodState } = currentMatch
+    const normalizedMatchPeriods = normalizePeriods(periods)
 
     // Only run timer logic if match is Live and periods are defined
-    if (status === "Live" && periods && periods.length > 0) {
+    if (status === "Live" && normalizedMatchPeriods && normalizedMatchPeriods.length > 0) {
       const initialPeriodOrder = periodState?.currentPeriodOrder ?? 0
       const initialElapsedTimeInCurrentPeriodMs = periodState?.elapsedTimeInCurrentPeriodMs ?? 0
       const initialTotalPlayingTimeMs = periodState?.totalPlayingTimeMs ?? 0
@@ -220,8 +238,8 @@ export default function FutsalLiveControlEnhanced({
         let tempAccumulatedPlayingTimeMs = 0 // Accumulates playing time of completed periods
         let foundCurrentPeriod = false
 
-        for (let i = 0; i < periods.length; i++) {
-          const period = periods[i]
+        for (let i = 0; i < normalizedMatchPeriods.length; i++) {
+          const period = normalizedMatchPeriods[i]
           const periodDurationMs = period.duration * 60 * 1000
 
           if (i < currentPeriodIdx) {
@@ -276,8 +294,8 @@ export default function FutsalLiveControlEnhanced({
 
         if (!foundCurrentPeriod) {
           // All periods are finished
-          const lastPeriod = periods[periods.length - 1]
-          setCurrentPeriodIndex(periods.length - 1)
+          const lastPeriod = normalizedMatchPeriods[normalizedMatchPeriods.length - 1]
+          setCurrentPeriodIndex(normalizedMatchPeriods.length - 1)
           setCurrentPeriodElapsedMinute(lastPeriod && !lastPeriod.breakPeriod ? lastPeriod.duration : 0)
           setCurrentPeriodElapsedSecond(0)
           setTotalPlayingMinutes(Math.floor(tempAccumulatedPlayingTimeMs / 60000))
@@ -528,7 +546,8 @@ export default function FutsalLiveControlEnhanced({
     try {
       setError("")
       setIsSaving(true)
-      const currentPeriod = currentMatch.periods?.[currentPeriodIndex]
+      const normalizedMatchPeriods = normalizePeriods(currentMatch.periods)
+      const currentPeriod = normalizedMatchPeriods[currentPeriodIndex]
       if (!currentPeriod) {
         setError("No periods defined for this match.")
         setIsSaving(false)
@@ -545,13 +564,13 @@ export default function FutsalLiveControlEnhanced({
         // Starting the match for the very first time
         newStartTime = new Date()
         newPeriodState = {
-          currentPeriodId: currentPeriod.id, // Add this
+          currentPeriodId: currentPeriod.id,
           currentPeriodOrder: 0,
           elapsedTimeInCurrentPeriodMs: 0,
           totalPlayingTimeMs: 0,
           lastUpdatedTimestamp: newStartTime.getTime(),
           matchPaused: false,
-          breakPeriod: currentPeriod.breakPeriod || false, // Add this
+          breakPeriod: currentPeriod.breakPeriod || false,
         }
         setTotalPlayingMinutes(0)
         setCurrentPeriodElapsedMinute(0)
@@ -569,7 +588,7 @@ export default function FutsalLiveControlEnhanced({
         setSuccess("Match resumed successfully!")
       } else if (currentPeriod.breakPeriod) {
         // Resuming from a break (e.g., Half Time)
-        const nextPlayingPeriodIndex = currentMatch.periods.findIndex(
+        const nextPlayingPeriodIndex = normalizedMatchPeriods.findIndex(
           (p, idx) => idx > currentPeriodIndex && !p.breakPeriod,
         )
         if (nextPlayingPeriodIndex === -1) {
@@ -577,15 +596,15 @@ export default function FutsalLiveControlEnhanced({
           setIsSaving(false)
           return
         }
-        const nextPlayingPeriod = currentMatch.periods[nextPlayingPeriodIndex]
+        const nextPlayingPeriod = normalizedMatchPeriods[nextPlayingPeriodIndex]
         newPeriodState = {
-          currentPeriodId: nextPlayingPeriod.id, // Add this
+          currentPeriodId: nextPlayingPeriod.id,
           currentPeriodOrder: nextPlayingPeriodIndex,
           elapsedTimeInCurrentPeriodMs: 0,
           totalPlayingTimeMs: currentMatch.periodState?.totalPlayingTimeMs || totalPlayingMinutes * 60 * 1000,
           lastUpdatedTimestamp: Date.now(),
           matchPaused: false,
-          breakPeriod: nextPlayingPeriod.breakPeriod || false, // Add this
+          breakPeriod: nextPlayingPeriod.breakPeriod || false,
         }
         setCurrentPeriodIndex(nextPlayingPeriodIndex)
         setCurrentPeriodElapsedMinute(0)
@@ -641,7 +660,8 @@ export default function FutsalLiveControlEnhanced({
       setIsSaving(true)
       setIsRunning(false) // Stop local timer immediately
 
-      const currentPeriod = currentMatch.periods?.[currentPeriodIndex]
+      const normalizedMatchPeriods = normalizePeriods(currentMatch.periods)
+      const currentPeriod = normalizedMatchPeriods[currentPeriodIndex]
       if (!currentPeriod) {
         setError("Cannot pause: No current period defined.")
         setIsSaving(false)
@@ -652,13 +672,13 @@ export default function FutsalLiveControlEnhanced({
       const currentTotalPlayingMs = totalPlayingMinutes * 60 * 1000
 
       const updatedPeriodState: FutsalMatch["periodState"] = {
-        currentPeriodId: currentPeriod.id, // Add this
+        currentPeriodId: currentPeriod.id,
         currentPeriodOrder: currentPeriodIndex,
         elapsedTimeInCurrentPeriodMs: currentElapsedMs,
         totalPlayingTimeMs: currentTotalPlayingMs,
         lastUpdatedTimestamp: Date.now(),
         matchPaused: true,
-        breakPeriod: currentPeriod.breakPeriod || false, // Add this
+        breakPeriod: currentPeriod.breakPeriod || false,
       }
 
       const updatedMatch = {
@@ -688,7 +708,9 @@ export default function FutsalLiveControlEnhanced({
   }
 
   const endMatch = async () => {
-    if (!currentMatch.periods) return // Should not happen if periods are properly initialized
+    const normalizedMatchPeriods = normalizePeriods(currentMatch.periods)
+    if (!normalizedMatchPeriods || normalizedMatchPeriods.length === 0) return
+
     try {
       setError("")
       setIsSaving(true)
@@ -698,13 +720,13 @@ export default function FutsalLiveControlEnhanced({
       const currentTotalPlayingMs = totalPlayingMinutes * 60 * 1000
 
       const updatedPeriodState: FutsalMatch["periodState"] = {
-        currentPeriodId: currentMatch.periods[currentPeriodIndex]?.id || "", // Add this, handle potential undefined
+        currentPeriodId: normalizedMatchPeriods[currentPeriodIndex]?.id || "",
         currentPeriodOrder: currentPeriodIndex,
         elapsedTimeInCurrentPeriodMs: currentElapsedMs,
         totalPlayingTimeMs: currentTotalPlayingMs,
         lastUpdatedTimestamp: Date.now(),
         matchPaused: true,
-        breakPeriod: currentMatch.periods[currentPeriodIndex]?.breakPeriod || false, // Add this
+        breakPeriod: normalizedMatchPeriods[currentPeriodIndex]?.breakPeriod || false,
       }
 
       const updatedMatch = {
@@ -788,7 +810,8 @@ export default function FutsalLiveControlEnhanced({
 
   const getMatchStatus = () => {
     if (currentMatch.status === "Finished") return "Finished"
-    const currentPeriod = currentMatch.periods?.[currentPeriodIndex]
+    const normalizedMatchPeriods = normalizePeriods(currentMatch.periods)
+    const currentPeriod = normalizedMatchPeriods[currentPeriodIndex]
     if (!currentPeriod) return "Unknown Period"
     if (running && currentMatch.status === "Live") {
       return `🔴 LIVE - ${currentPeriod.name}`
@@ -802,9 +825,10 @@ export default function FutsalLiveControlEnhanced({
     return "Scheduled" // Or "Active"
   }
 
-  const currentPeriod = currentMatch.periods?.[currentPeriodIndex]
+  const normalizedMatchPeriods = normalizePeriods(currentMatch.periods)
+  const currentPeriod = normalizedMatchPeriods[currentPeriodIndex]
   const totalMatchPlayingDuration =
-    currentMatch.periods?.filter((p) => !p.breakPeriod).reduce((sum, p) => sum + p.duration, 0) || 0
+    normalizedMatchPeriods.filter((p) => !p.breakPeriod).reduce((sum, p) => sum + p.duration, 0) || 0
 
   // Handle duration editing
   const handleAddPeriod = (breakPeriod: boolean) => {
@@ -837,7 +861,8 @@ export default function FutsalLiveControlEnhanced({
 
   const handleCancelEditingPeriods = () => {
     setIsEditingPeriods(false)
-    setTempPeriods(currentMatch.periods || [])
+    // </CHANGE> Use normalizePeriods to convert string[] | MatchPeriod[] to MatchPeriod[]
+    setTempPeriods(normalizePeriods(currentMatch.periods))
     setPeriodEditError("")
   }
 
@@ -912,7 +937,7 @@ export default function FutsalLiveControlEnhanced({
             <Button
               onClick={startMatch}
               className="bg-green-600 hover:bg-green-700"
-              disabled={isSaving || !currentMatch.periods || currentMatch.periods.length === 0}
+              disabled={isSaving || !normalizedMatchPeriods || normalizedMatchPeriods.length === 0}
             >
               {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Play className="h-4 w-4 mr-2" />}
               {currentMatch.startTime ? "Resume Match" : "Start Match"}
@@ -921,7 +946,7 @@ export default function FutsalLiveControlEnhanced({
           {currentPeriod?.breakPeriod && currentMatch.status === "Live" && (
             <Button onClick={startMatch} className="bg-blue-600 hover:bg-blue-700" disabled={isSaving}>
               <Play className="h-4 w-4 mr-2" />
-              Start {currentMatch.periods?.[currentPeriodIndex + 1]?.name || "Next Period"}
+              Start {normalizedMatchPeriods[currentPeriodIndex + 1]?.name || "Next Period"}
             </Button>
           )}
           {running && currentMatch.status === "Live" && !currentPeriod?.breakPeriod && (
@@ -975,8 +1000,8 @@ export default function FutsalLiveControlEnhanced({
         {!isEditingPeriods ? (
           /* Display Mode */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
-            {currentMatch.periods && currentMatch.periods.length > 0 ? (
-              currentMatch.periods.map((period, idx) => (
+            {normalizedMatchPeriods && normalizedMatchPeriods.length > 0 ? (
+              normalizedMatchPeriods.map((period, idx) => (
                 <div
                   key={period.id}
                   className={`text-center p-3 rounded-lg ${period.breakPeriod ? "bg-yellow-50/30 border-yellow-200" : "bg-blue-50/30 border-blue-200"}`}
